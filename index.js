@@ -5,8 +5,10 @@ const axios = require("axios");
 const util = require("util");
 const R = require("ramda");
 
-const user = "alphashuro0dev";
-const accessToken = "AZQBjKO9FdPC9TLnfAuOpGgwxrw_FRPBf9H6YVNEb2znZmAo3QAAAAA";
+require("dotenv").config();
+
+const user = process.env.PINTUSER;
+const accessToken = process.env.TOKEN;
 
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
@@ -23,21 +25,28 @@ getImages("**/*.*")
     const [role, question, answer, description] = path.split("/");
 
     const pin = {
-      board: `${user}/${question}`,
-      note: description,
+      board: `${user}/${question.replace(/ /g, "-")}`,
+      note: description.replace(/\^/g, ":"),
       link: "http://www.tedbaker.com/",
       image_base64
     };
 
-    const { data } = await axios.post(
-      `https://api.pinterest.com/v1/pins/?access_token=${accessToken}`,
-      pin
-    );
+    console.log(pin.board);
 
-    return {
-      [`${role}/${question}/${answer}`]: [data.data.id]
-    };
+    try {
+      const { data } = await axios.post(
+        `https://api.pinterest.com/v1/pins/?access_token=${accessToken}`,
+        pin
+      );
+
+      return {
+        [`${role}/${question}/${answer}`]: [data.data.id]
+      };
+    } catch (e) {
+      console.log(e.response.data);
+    }
   })
+  .filter(Boolean)
   .reduce(R.mergeWith(R.compose(R.join(","), R.concat)))
   .mergeMap(async pins => {
     await writeFile("../result.json", JSON.stringify(pins, null, " "));
