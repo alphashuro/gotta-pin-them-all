@@ -15,7 +15,15 @@ const writeFile = util.promisify(fs.writeFile);
 
 const getImages = Rx.Observable.bindNodeCallback(glob);
 
-process.chdir("quiz");
+function pint(endpoint, method = "get", data) {
+  const url = `https://api.pinterest.com/v1/${endpoint}/?access_token=${accessToken}`;
+
+  return axios({
+    method,
+    url,
+    data
+  });
+}
 
 async function addPin(data) {
   const { role, question, answer, description, image_base64 } = data;
@@ -28,10 +36,7 @@ async function addPin(data) {
   };
 
   try {
-    const { data } = await axios.post(
-      `https://api.pinterest.com/v1/pins/?access_token=${accessToken}`,
-      pin
-    );
+    const { data } = await pint("pins", "post", pin);
 
     return {
       [`${role}/${question}/${answer}`]: [data.data.id]
@@ -62,6 +67,8 @@ async function writeResults(data) {
   await writeFile("../result.json", JSON.stringify(data, null, " "));
   return data;
 }
+
+process.chdir("quiz");
 
 getImages("**/*.*")
   .do(console.log)
