@@ -17,39 +17,58 @@ const getImages = Rx.Observable.bindNodeCallback(glob);
 
 process.chdir("quiz");
 
-getImages("**/*.*")
-  .mergeAll()
-  .do(console.log)
-  .mergeMap(async path => {
-    const image_base64 = await readFile(path, "base64");
-    const [role, question, answer, description] = path.split("/");
+async function addPin(data) {
+  const { role, question, answer, description, image_base64 } = data;
 
-    const pin = {
-      board: `${user}/${question.replace(/ /g, "-")}`,
-      note: description.replace(/\^/g, ":"),
-      link: "http://www.tedbaker.com/",
-      image_base64
+  const pin = {
+    board: `${user}/${question.replace(/ /g, "-")}`,
+    note: description.replace(/\^/g, ":"),
+    link: "http://www.tedbaker.com/",
+    image_base64
+  };
+
+  try {
+    const { data } = await axios.post(
+      `https://api.pinterest.com/v1/pins/?access_token=${accessToken}`,
+      pin
+    );
+
+    return {
+      [`${role}/${question}/${answer}`]: [data.data.id]
     };
+  } catch (e) {
+    console.log(e.response.data);
 
-    console.log(pin.board);
+    return addPin(data);
+  }
+}
 
-    try {
-      const { data } = await axios.post(
-        `https://api.pinterest.com/v1/pins/?access_token=${accessToken}`,
-        pin
-      );
+async function pinData(path) {
+  const image_base64 = await readFile(path, "base64");
+  const [role, question, answer, description] = path.split("/");
 
-      return {
-        [`${role}/${question}/${answer}`]: [data.data.id]
-      };
-    } catch (e) {
-      console.log(e.response.data);
-    }
-  })
+  return {
+    role,
+    question,
+    answer,
+    description,
+    image_base64
+  };
+}
+
+const csv = R.pipe(R.concat, R.join(","));
+
+async function writeResults(data) {
+  await writeFile("../result.json", JSON.stringify(data, null, " "));
+  return data;
+}
+
+getImages("**/*.*")
+  .do(console.log)
+  .mergeAll()
+  .mergeMap(pinData)
+  .mergeMap(addPin)
   .filter(Boolean)
-  .reduce(R.mergeWith(R.compose(R.join(","), R.concat)))
-  .mergeMap(async pins => {
-    await writeFile("../result.json", JSON.stringify(pins, null, " "));
-    return pins;
-  })
+  .reduce(R.mergeWith(csv))
+  .mergeMap(writeResults)
   .subscribe(console.log, console.error);
